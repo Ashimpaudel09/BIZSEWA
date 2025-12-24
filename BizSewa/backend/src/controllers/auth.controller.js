@@ -20,6 +20,7 @@ function generateToken(user) {
 }
 
 // POST /api/auth/register  (Citizen)
+
 async function register(req, res) {
   try {
     const { name, email, password } = req.body;
@@ -29,11 +30,12 @@ async function register(req, res) {
       return res.status(400).json({ message: "Email already registered" });
     }
 
-    const passwordHash = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const user = await User.createUser({
       name,
       email,
-      passwordHash,
+      password: hashedPassword,
       role: "CITIZEN",
     });
 
@@ -45,30 +47,32 @@ async function register(req, res) {
   }
 }
 
+
 // POST /api/auth/login
 async function login(req, res) {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password required" });
+    }
+
     const user = await User.findUserByEmail(email);
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({ message: "Invalid email or password" });
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(400).json({ message: "Invalid credentials" });
+    if (!user.password) {
+      return res.status(500).json({ message: "User has no password set" });
     }
 
-    const payload = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    };
-    const token = generateToken(payload);
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
 
-    res.json({ user: payload, token });
+    const token = generateToken(user);
+    res.status(200).json({ user, token });
   } catch (err) {
     console.error("Login error:", err);
     res.status(500).json({ message: "Server error" });
